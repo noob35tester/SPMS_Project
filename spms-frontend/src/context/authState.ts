@@ -14,9 +14,9 @@ export type CreateUserInput = {
   name: string;
   email: string;
   mobile: string;
-  department: string;
+  departmentId?: string;
   designation: string;
-  reportingManager: string;
+  reportingManagerId?: string;
   role: Role;
   status?: AccountStatus;
 };
@@ -26,11 +26,12 @@ export type AuthContextValue = {
   permissions: Permission[];
   isAuthenticated: boolean;
   login: (email: string, password: string) => Promise<AuthUser>;
-  socialLogin: (provider: Exclude<LoginProvider, 'email'>, email: string) => Promise<AuthUser>;
+  socialLogin: (provider: Exclude<LoginProvider, 'email'>) => Promise<void>;
   createUser: (input: CreateUserInput) => Promise<ManagedUser>;
   activateUser: (email: string, code: string, password: string, acceptedPolicy: boolean) => Promise<AuthUser>;
   requestPasswordReset: (email: string) => Promise<string>;
   resetPassword: (email: string, code: string, password: string) => Promise<void>;
+  refreshSession: (accessToken: string) => Promise<string>;
   users: ManagedUser[];
   logout: () => void;
   can: (permissions: Permission[]) => boolean;

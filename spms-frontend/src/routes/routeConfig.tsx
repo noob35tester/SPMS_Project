@@ -28,6 +28,7 @@ import { NotificationsPage } from '../pages/NotificationsPage';
 import { ProjectsPage } from '../pages/ProjectsPage';
 import { RoleSectionPage } from '../pages/RoleSectionPage';
 import { SettingsPage } from '../pages/SettingsPage';
+import { UsersRolesPage } from '../pages/UsersRolesPage';
 import type { Permission } from '../rbac/roles';
 
 export type AppRouteConfig = {
@@ -108,14 +109,7 @@ export const appRoutes: AppRouteConfig[] = [
     label: 'Users & Roles',
     icon: Users,
     permissions: ['users-roles:view'],
-    element: (
-      <RoleSectionPage
-        eyebrow="Administration"
-        title="Users & Roles"
-        description="Single-role account mapping and permission assignment."
-        items={['User Directory', 'Role Assignment', 'Permission Matrix', 'Login Access']}
-      />
-    ),
+    element: <UsersRolesPage />,
   },
   {
     path: '/create-user',

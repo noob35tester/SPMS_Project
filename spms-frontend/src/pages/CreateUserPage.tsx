@@ -1,22 +1,57 @@
-import { type FormEvent, useState } from 'react';
+import { type FormEvent, useEffect, useState } from 'react';
+import { http } from '../api/http';
 import { useAuth } from '../context/useAuth';
 import { ACCOUNT_STATUS_LABELS, ROLE_LABELS, type Role } from '../rbac/roles';
 
 const roles = Object.keys(ROLE_LABELS) as Role[];
 
+type Department = {
+  id: string;
+  name: string;
+};
+
+type UserOption = {
+  id: string;
+  name: string;
+  email: string;
+};
+
 export function CreateUserPage() {
   const { createUser, users } = useAuth();
+  const [departments, setDepartments] = useState<Department[]>([]);
+  const [userOptions, setUserOptions] = useState<UserOption[]>([]);
   const [form, setForm] = useState({
     name: '',
     email: '',
     mobile: '',
-    department: '',
+    departmentId: '',
     designation: '',
-    reportingManager: '',
+    reportingManagerId: '',
     role: 'EMPLOYEE' as Role,
   });
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
+
+  useEffect(() => {
+    let active = true;
+
+    Promise.all([
+      http.get('/departments'),
+      http.get('/users', { params: { limit: 100 } }),
+    ])
+      .then(([departmentsResponse, usersResponse]) => {
+        if (!active) {
+          return;
+        }
+        setDepartments(departmentsResponse.data);
+        setUserOptions(usersResponse.data.data ?? usersResponse.data);
+      })
+      .catch(() => undefined);
+
+    return () => {
+      active = false;
+    };
+  }, []);
 
   async function submit(event: FormEvent) {
     event.preventDefault();
@@ -30,9 +65,9 @@ export function CreateUserPage() {
         name: '',
         email: '',
         mobile: '',
-        department: '',
+        departmentId: '',
         designation: '',
-        reportingManager: '',
+        reportingManagerId: '',
         role: 'EMPLOYEE',
       });
     } catch (caught) {
@@ -64,7 +99,12 @@ export function CreateUserPage() {
         </label>
         <label>
           Department
-          <input required value={form.department} onChange={(event) => setForm({ ...form, department: event.target.value })} />
+          <select required value={form.departmentId} onChange={(event) => setForm({ ...form, departmentId: event.target.value })}>
+            <option value="">Select department</option>
+            {departments.map((department) => (
+              <option key={department.id} value={department.id}>{department.name}</option>
+            ))}
+          </select>
         </label>
         <label>
           Designation
@@ -72,7 +112,12 @@ export function CreateUserPage() {
         </label>
         <label>
           Reporting manager
-          <input required value={form.reportingManager} onChange={(event) => setForm({ ...form, reportingManager: event.target.value })} />
+          <select value={form.reportingManagerId} onChange={(event) => setForm({ ...form, reportingManagerId: event.target.value })}>
+            <option value="">Not assigned</option>
+            {userOptions.map((account) => (
+              <option key={account.id} value={account.id}>{account.name} - {account.email}</option>
+            ))}
+          </select>
         </label>
         <label>
           Role

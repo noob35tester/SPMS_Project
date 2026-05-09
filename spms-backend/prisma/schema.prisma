@@ -7,61 +7,108 @@ datasource db {
 }
 
 model User {
-  id           String     @id @default(uuid())
-  name         String
-  email        String     @unique
-  passwordHash String
-  status       UserStatus @default(ACTIVE)
-  departmentId String?
-  department   Department? @relation(fields: [departmentId], references: [id])
-  userRoles    UserRole[]
-  assignedTasks Task[] @relation("TaskAssignee")
-  createdTasks  Task[] @relation("TaskCreator")
-  comments      TaskComment[]
+  id                 String     @id @default(uuid())
+  name               String
+  email              String     @unique
+  passwordHash       String
+  status             UserStatus @default(PENDING_ACTIVATION)
+  mobile             String?
+  designation        String?
+  activationCode     String?
+  resetCode          String?
+  policyAccepted     Boolean    @default(false)
+  lastLoginAt        DateTime?
+  departmentId       String?
+  reportingManagerId String?
+
+  department       Department?     @relation(fields: [departmentId], references: [id])
+  reportingManager User?           @relation("ReportingManager", fields: [reportingManagerId], references: [id])
+  directReports    User[]          @relation("ReportingManager")
+  userRoles        UserRole[]
+  assignedTasks    Task[]          @relation("TaskAssignee")
+  createdTasks     Task[]          @relation("TaskCreator")
+  comments         TaskComment[]
+  projectMembers   ProjectMember[]
+  createdProjects  Project[]       @relation("ProjectCreator")
+  notifications    Notification[]
+  auditLogs        AuditLog[]
+  ownedLeads       Lead[]          @relation("LeadOwner")
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
 
 enum UserStatus {
+  PENDING_ACTIVATION
   ACTIVE
   INACTIVE
-  RESIGNED
+  LOCKED
+  SUSPENDED
+  TERMINATED
 }
 
 model Role {
-  id        String     @id @default(uuid())
-  name      String     @unique
-  userRoles UserRole[]
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id              String           @id @default(uuid())
+  name            String           @unique
+  userRoles       UserRole[]
+  rolePermissions RolePermission[]
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+}
+
+model Permission {
+  id              String           @id @default(uuid())
+  key             String           @unique
+  module          String
+  action          String
+  rolePermissions RolePermission[]
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+}
+
+model RolePermission {
+  id           String     @id @default(uuid())
+  roleId       String
+  permissionId String
+  role         Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@unique([roleId, permissionId])
 }
 
 model UserRole {
   id     String @id @default(uuid())
   userId String
   roleId String
-  user User @relation(fields: [userId], references: [id])
-  role Role @relation(fields: [roleId], references: [id])
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role   Role   @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
   @@unique([userId, roleId])
 }
 
 model Department {
-  id   String @id @default(uuid())
-  name String @unique
-  users    User[]
-  projects Project[]
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id        String    @id @default(uuid())
+  name      String    @unique
+  users     User[]
+  projects  Project[]
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
 }
 
 model Project {
-  id          String        @id @default(uuid())
-  name        String
-  description String?
-  status      ProjectStatus @default(ACTIVE)
+  id           String        @id @default(uuid())
+  name         String
+  description  String?
+  status       ProjectStatus @default(ACTIVE)
   departmentId String?
-  department   Department? @relation(fields: [departmentId], references: [id])
-  tasks Task[]
+  createdById  String
+  archivedAt   DateTime?
+
+  department Department?     @relation(fields: [departmentId], references: [id])
+  createdBy  User            @relation("ProjectCreator", fields: [createdById], references: [id])
+  members    ProjectMember[]
+  tasks      Task[]
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
@@ -71,24 +118,46 @@ enum ProjectStatus {
   ON_HOLD
   COMPLETED
   CANCELLED
+  ARCHIVED
+}
+
+model ProjectMember {
+  id        String  @id @default(uuid())
+  projectId String
+  userId    String
+  role      String  @default("MEMBER")
+  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  user      User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, userId])
 }
 
 model Task {
-  id          String       @id @default(uuid())
-  title       String
-  description String?
-  priority    TaskPriority @default(MEDIUM)
-  dueDate     DateTime?
-  projectId String
-  project   Project @relation(fields: [projectId], references: [id])
-  assigneeId String?
-  assignee   User? @relation("TaskAssignee", fields: [assigneeId], references: [id])
-  createdById String
-  createdBy   User @relation("TaskCreator", fields: [createdById], references: [id])
-  statusId String
-  status   WorkflowState @relation(fields: [statusId], references: [id])
-  comments TaskComment[]
-  history  TaskStatusHistory[]
+  id             String       @id @default(uuid())
+  title          String
+  description    String?
+  priority       TaskPriority @default(MEDIUM)
+  dueDate        DateTime?
+  position       Int          @default(0)
+  estimatedHours Float?
+  actualHours    Float?
+  completedAt    DateTime?
+  archivedAt     DateTime?
+  projectId      String
+  assigneeId     String?
+  createdById    String
+  statusId       String
+  parentTaskId   String?
+
+  project    Project             @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  assignee   User?               @relation("TaskAssignee", fields: [assigneeId], references: [id])
+  createdBy  User                @relation("TaskCreator", fields: [createdById], references: [id])
+  status     WorkflowState       @relation(fields: [statusId], references: [id])
+  parentTask Task?               @relation("TaskHierarchy", fields: [parentTaskId], references: [id])
+  subtasks   Task[]              @relation("TaskHierarchy")
+  comments   TaskComment[]
+  history    TaskStatusHistory[]
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
@@ -101,65 +170,110 @@ enum TaskPriority {
 }
 
 model WorkflowDefinition {
-  id     String @id @default(uuid())
-  name   String
-  module String
+  id          String               @id @default(uuid())
+  name        String
+  module      String
   states      WorkflowState[]
   transitions WorkflowTransition[]
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt   DateTime             @default(now())
+  updatedAt   DateTime             @updatedAt
 }
 
 model WorkflowState {
-  id    String @id @default(uuid())
-  name  String
-  order Int
-  workflowId String
-  workflow   WorkflowDefinition @relation(fields: [workflowId], references: [id])
-  tasks Task[]
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id                  String               @id @default(uuid())
+  name                String
+  order               Int
+  workflowId          String
+  workflow            WorkflowDefinition   @relation(fields: [workflowId], references: [id], onDelete: Cascade)
+  tasks               Task[]
+  outgoingTransitions WorkflowTransition[] @relation("TransitionFrom")
+  incomingTransitions WorkflowTransition[] @relation("TransitionTo")
+  createdAt           DateTime             @default(now())
+  updatedAt           DateTime             @updatedAt
 }
 
 model WorkflowTransition {
-  id String @id @default(uuid())
-  workflowId String
-  workflow   WorkflowDefinition @relation(fields: [workflowId], references: [id])
-  fromStateId String
-  toStateId   String
-  allowedRole String
-  actionName  String
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id              String             @id @default(uuid())
+  workflowId      String
+  workflow        WorkflowDefinition @relation(fields: [workflowId], references: [id], onDelete: Cascade)
+  fromStateId     String
+  toStateId       String
+  fromState       WorkflowState      @relation("TransitionFrom", fields: [fromStateId], references: [id])
+  toState         WorkflowState      @relation("TransitionTo", fields: [toStateId], references: [id])
+  allowedRoles    String[]
+  actionName      String
+  requiresComment Boolean            @default(false)
+  isActive        Boolean            @default(true)
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
 }
 
 model TaskStatusHistory {
-  id String @id @default(uuid())
-  taskId String
-  task   Task @relation(fields: [taskId], references: [id])
-  fromStatus String?
-  toStatus   String
+  id          String   @id @default(uuid())
+  taskId      String
+  task        Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  fromStatus  String?
+  toStatus    String
   changedById String
+  comment     String?
   changedAt   DateTime @default(now())
 }
 
 model TaskComment {
-  id      String @id @default(uuid())
-  message String
-  taskId String
-  task   Task @relation(fields: [taskId], references: [id])
-  userId String
-  user   User @relation(fields: [userId], references: [id])
+  id        String   @id @default(uuid())
+  message   String
+  taskId    String
+  task      Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
 
 model Notification {
-  id      String  @id @default(uuid())
-  title   String
-  message String
-  isRead  Boolean @default(false)
-  userId String
+  id        String   @id @default(uuid())
+  title     String
+  message   String
+  type      String
+  link      String?
+  isRead    Boolean  @default(false)
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+}
+
+model AuditLog {
+  id        String   @id @default(uuid())
+  userId    String?
+  user      User?    @relation(fields: [userId], references: [id])
+  action    String
+  entity    String
+  entityId  String?
+  details   Json?
+  createdAt DateTime @default(now())
+}
+
+model Lead {
+  id        String     @id @default(uuid())
+  name      String
+  company   String?
+  email     String?
+  phone     String?
+  source    String?
+  status    LeadStatus @default(NEW)
+  ownerId   String?
+  owner     User?      @relation("LeadOwner", fields: [ownerId], references: [id])
+  notes     String?
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+}
+
+enum LeadStatus {
+  NEW
+  CONTACTED
+  QUALIFIED
+  PROPOSAL
+  WON
+  LOST
 }

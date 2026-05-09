@@ -33,11 +33,9 @@ export function LoginPage() {
     setIsSubmitting(true);
 
     try {
-      const loggedInUser = await socialLogin(provider, email);
-      navigate(ROLE_ACCESS[loggedInUser.role].landingPath, { replace: true });
+      await socialLogin(provider);
     } catch {
       setError('Access Denied or Account Not Found');
-    } finally {
       setIsSubmitting(false);
     }
   }

@@ -1,6 +1,6 @@
 import { type ReactNode, useCallback, useMemo, useState } from 'react';
 import { http } from '../api/http';
-import { getLandingPath, getRolePermissions, hasPermission, hasRole } from '../rbac/access';
+import { getLandingPath, getRolePermissions, hasRole } from '../rbac/access';
 import { demoAccounts } from '../rbac/demoAccounts';
 import type { AuthUser, Permission, Role } from '../rbac/roles';
 import { AuthContext, type CreateUserInput, type ManagedUser } from './authState';
@@ -11,6 +11,8 @@ type ApiUser = Partial<AuthUser> & {
   email: string;
   roleName?: string;
   roles?: Role[];
+  permissions?: Permission[];
+  landingPath?: string;
 };
 
 const TOKEN_KEY = 'accessToken';
@@ -41,15 +43,22 @@ function normalizeRole(role?: string): Role {
 }
 
 function normalizeApiUser(user: ApiUser): AuthUser {
+  const role = normalizeRole(user.role ?? user.roleName ?? user.roles?.[0]);
+
   return {
     id: user.id,
     name: user.name,
     email: user.email,
-    role: normalizeRole(user.role ?? user.roleName ?? user.roles?.[0]),
+    role,
+    roles: user.roles?.map(normalizeRole) ?? [role],
+    permissions: user.permissions ?? getRolePermissions(role),
+    landingPath: user.landingPath ?? getLandingPath(role),
     mobile: user.mobile,
     department: user.department,
+    departmentId: user.departmentId,
     designation: user.designation,
     reportingManager: user.reportingManager,
+    reportingManagerId: user.reportingManagerId,
     status: user.status ?? 'ACTIVE',
   };
 }
@@ -85,6 +94,15 @@ function isAllowedToLogin(user: ManagedUser) {
   }
 }
 
+function hasUserPermission(user: AuthUser | null, requiredPermissions: Permission[]) {
+  if (!user) {
+    return false;
+  }
+
+  const availablePermissions = user.permissions ?? getRolePermissions(user.role);
+  return requiredPermissions.every((permission) => availablePermissions.includes(permission));
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(() => {
     const raw = localStorage.getItem(USER_KEY);
@@ -92,27 +110,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   });
   const [users, setUsers] = useState<ManagedUser[]>(seedUsers);
 
-  const permissions = useMemo(() => (user ? getRolePermissions(user.role) : []), [user]);
-  const landingPath = user ? getLandingPath(user.role) : '/login';
+  const permissions = useMemo(() => (user ? user.permissions ?? getRolePermissions(user.role) : []), [user]);
+  const landingPath = user ? user.landingPath ?? getLandingPath(user.role) : '/login';
   const isAuthenticated = Boolean(user && localStorage.getItem(TOKEN_KEY));
 
+  const persistUsers = useCallback((nextUsers: ManagedUser[]) => {
+    localStorage.setItem(USERS_KEY, JSON.stringify(nextUsers));
+    setUsers(nextUsers);
+  }, []);
+
   const login = useCallback(async (email: string, password: string) => {
-    const localUser = users.find((account) => account.email.toLowerCase() === email.toLowerCase());
-
-    if (localUser) {
-      if (localUser.password !== password) {
-        throw new Error('Invalid password');
-      }
-
-      isAllowedToLogin(localUser);
-
-      const demoUser: AuthUser = { ...localUser };
-      localStorage.setItem(TOKEN_KEY, 'demo-token');
-      localStorage.setItem(USER_KEY, JSON.stringify(demoUser));
-      setUser(demoUser);
-      return demoUser;
-    }
-
     try {
       const response = await http.post('/auth/login', { email, password });
       const apiUser = normalizeApiUser(response.data.user);
@@ -124,115 +131,160 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setUser(apiUser);
       return apiUser;
     } catch (error) {
-      throw error;
+      const localUser = users.find((account) => account.email.toLowerCase() === email.toLowerCase());
+
+      if (!localUser) {
+        throw error;
+      }
+
+      if (localUser.password !== password) {
+        throw new Error('Invalid password');
+      }
+
+      isAllowedToLogin(localUser);
+
+      const demoUser = normalizeApiUser(localUser);
+      localStorage.setItem(TOKEN_KEY, 'demo-token');
+      localStorage.setItem(USER_KEY, JSON.stringify(demoUser));
+      setUser(demoUser);
+      return demoUser;
     }
   }, [users]);
 
-  const socialLogin = useCallback(async (_provider: 'google' | 'microsoft' | 'outlook', email: string) => {
-    const localUser = users.find((account) => account.email.toLowerCase() === email.toLowerCase());
+  const refreshSession = useCallback(async (accessToken: string) => {
+    localStorage.setItem(TOKEN_KEY, accessToken);
+    const response = await http.get('/auth/me');
+    const apiUser = normalizeApiUser(response.data);
+    localStorage.setItem(USER_KEY, JSON.stringify(apiUser));
+    setUser(apiUser);
+    return apiUser.landingPath ?? getLandingPath(apiUser.role);
+  }, []);
 
-    if (!localUser) {
-      throw new Error('Account not found');
-    }
-
-    isAllowedToLogin(localUser);
-
-    const sessionUser: AuthUser = { ...localUser };
-    localStorage.setItem(TOKEN_KEY, 'demo-token');
-    localStorage.setItem(USER_KEY, JSON.stringify(sessionUser));
-    setUser(sessionUser);
-    return sessionUser;
-  }, [users]);
-
-  const persistUsers = useCallback((nextUsers: ManagedUser[]) => {
-    localStorage.setItem(USERS_KEY, JSON.stringify(nextUsers));
-    setUsers(nextUsers);
+  const socialLogin = useCallback(async (provider: 'google' | 'microsoft' | 'outlook') => {
+    const baseUrl = http.defaults.baseURL ?? 'http://localhost:3000/api';
+    const returnTo = `${window.location.origin}/auth/callback`;
+    window.location.assign(`${baseUrl}/auth/social/${provider}/start?returnTo=${encodeURIComponent(returnTo)}`);
   }, []);
 
   const createUser = useCallback(async (input: CreateUserInput) => {
-    if (!user || !hasPermission(user.role, ['users:create'])) {
+    if (!hasUserPermission(user, ['users:create'])) {
       throw new Error('Only Super Admin, Admin, or HR can create users');
     }
 
-    if (users.some((account) => account.email.toLowerCase() === input.email.toLowerCase())) {
-      throw new Error('A user with this email already exists');
-    }
+    try {
+      const response = await http.post('/users', input);
+      const created = normalizeApiUser(response.data) as ManagedUser;
+      created.activationCode = response.data.activationCode;
+      persistUsers([created, ...users.filter((account) => account.id !== created.id)]);
+      return created;
+    } catch (error) {
+      if (users.some((account) => account.email.toLowerCase() === input.email.toLowerCase())) {
+        throw new Error('A user with this email already exists');
+      }
 
-    const newUser: ManagedUser = {
-      id: `user-${Date.now()}`,
-      ...input,
-      email: input.email.toLowerCase(),
-      status: 'PENDING_ACTIVATION',
-      activationCode: activationCode(),
-      policyAccepted: false,
-    };
-    persistUsers([...users, newUser]);
-    return newUser;
+      const newUser: ManagedUser = {
+        id: `user-${Date.now()}`,
+        ...input,
+        email: input.email.toLowerCase(),
+        role: input.role,
+        status: 'PENDING_ACTIVATION',
+        activationCode: activationCode(),
+        policyAccepted: false,
+      };
+      persistUsers([...users, newUser]);
+      return newUser;
+    }
   }, [persistUsers, user, users]);
 
   const activateUser = useCallback(async (email: string, code: string, password: string, acceptedPolicy: boolean) => {
-    const localUser = users.find((account) => account.email.toLowerCase() === email.toLowerCase());
+    try {
+      const response = await http.post('/auth/activate', {
+        email,
+        code,
+        password,
+        acceptedPolicy,
+      });
+      const apiUser = normalizeApiUser(response.data.user);
+      localStorage.setItem(TOKEN_KEY, response.data.accessToken);
+      localStorage.setItem(USER_KEY, JSON.stringify(apiUser));
+      setUser(apiUser);
+      return apiUser;
+    } catch (error) {
+      const localUser = users.find((account) => account.email.toLowerCase() === email.toLowerCase());
 
-    if (!localUser || localUser.activationCode !== code) {
-      throw new Error('Invalid activation link or OTP');
+      if (!localUser || localUser.activationCode !== code) {
+        throw error instanceof Error ? error : new Error('Invalid activation link or OTP');
+      }
+
+      if (!acceptedPolicy) {
+        throw new Error('Company policy acceptance is required');
+      }
+
+      const activatedUser: ManagedUser = {
+        ...localUser,
+        password,
+        status: 'ACTIVE',
+        activationCode: undefined,
+        policyAccepted: true,
+      };
+      const nextUsers = users.map((account) => (account.id === activatedUser.id ? activatedUser : account));
+      persistUsers(nextUsers);
+
+      localStorage.setItem(TOKEN_KEY, 'demo-token');
+      localStorage.setItem(USER_KEY, JSON.stringify(activatedUser));
+      setUser(activatedUser);
+      return activatedUser;
     }
-
-    if (!acceptedPolicy) {
-      throw new Error('Company policy acceptance is required');
-    }
-
-    const activatedUser: ManagedUser = {
-      ...localUser,
-      password,
-      status: 'ACTIVE',
-      activationCode: undefined,
-      policyAccepted: true,
-    };
-    const nextUsers = users.map((account) => (account.id === activatedUser.id ? activatedUser : account));
-    persistUsers(nextUsers);
-
-    localStorage.setItem(TOKEN_KEY, 'demo-token');
-    localStorage.setItem(USER_KEY, JSON.stringify(activatedUser));
-    setUser(activatedUser);
-    return activatedUser;
   }, [persistUsers, users]);
 
   const requestPasswordReset = useCallback(async (email: string) => {
-    const localUser = users.find((account) => account.email.toLowerCase() === email.toLowerCase());
+    try {
+      const response = await http.post('/auth/forgot-password', { email });
+      return response.data.resetCode;
+    } catch (error) {
+      const localUser = users.find((account) => account.email.toLowerCase() === email.toLowerCase());
 
-    if (!localUser) {
-      throw new Error('Account not found');
+      if (!localUser) {
+        throw error instanceof Error ? error : new Error('Account not found');
+      }
+
+      if (localUser.status !== 'ACTIVE') {
+        throw new Error('Only active accounts can reset passwords');
+      }
+
+      const resetCode = activationCode();
+      persistUsers(users.map((account) => (account.id === localUser.id ? { ...account, resetCode } : account)));
+      return resetCode;
     }
-
-    if (localUser.status !== 'ACTIVE') {
-      throw new Error('Only active accounts can reset passwords');
-    }
-
-    const resetCode = activationCode();
-    persistUsers(users.map((account) => (account.id === localUser.id ? { ...account, resetCode } : account)));
-    return resetCode;
   }, [persistUsers, users]);
 
   const resetPassword = useCallback(async (email: string, code: string, password: string) => {
-    const localUser = users.find((account) => account.email.toLowerCase() === email.toLowerCase());
+    try {
+      await http.post('/auth/reset-password', { email, code, password });
+    } catch (error) {
+      const localUser = users.find((account) => account.email.toLowerCase() === email.toLowerCase());
 
-    if (!localUser || localUser.resetCode !== code) {
-      throw new Error('Invalid reset code');
+      if (!localUser || localUser.resetCode !== code) {
+        throw error instanceof Error ? error : new Error('Invalid reset code');
+      }
+
+      persistUsers(users.map((account) => (
+        account.id === localUser.id ? { ...account, password, resetCode: undefined } : account
+      )));
     }
-
-    persistUsers(users.map((account) => (
-      account.id === localUser.id ? { ...account, password, resetCode: undefined } : account
-    )));
   }, [persistUsers, users]);
 
   const logout = useCallback(() => {
+    if (localStorage.getItem(TOKEN_KEY) !== 'demo-token') {
+      void http.post('/auth/logout').catch(() => undefined);
+    }
     localStorage.removeItem(TOKEN_KEY);
     localStorage.removeItem(USER_KEY);
     setUser(null);
   }, []);
 
   const can = useCallback(
-    (requiredPermissions: Permission[]) => (user ? hasPermission(user.role, requiredPermissions) : false),
+    (requiredPermissions: Permission[]) => hasUserPermission(user, requiredPermissions),
     [user],
   );
 
@@ -253,6 +305,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       activateUser,
       requestPasswordReset,
       resetPassword,
+      refreshSession,
       logout,
       can,
       is,
@@ -268,6 +321,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       login,
       logout,
       permissions,
+      refreshSession,
       requestPasswordReset,
       resetPassword,
       socialLogin,

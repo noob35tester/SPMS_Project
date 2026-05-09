@@ -51,10 +51,15 @@ export interface AuthUser {
   name: string;
   email: string;
   role: Role;
+  roles?: Role[];
+  permissions?: Permission[];
+  landingPath?: string;
   mobile?: string;
   department?: string;
+  departmentId?: string;
   designation?: string;
   reportingManager?: string;
+  reportingManagerId?: string;
   status?: AccountStatus;
 }
 
