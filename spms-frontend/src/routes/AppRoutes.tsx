@@ -1,45 +1,54 @@
 import { Navigate, Route, Routes } from 'react-router-dom';
 import { ProtectedRoute } from '../components/ProtectedRoute';
 import { AuthProvider } from '../context/AuthContext';
-import { useAuth } from '../context/useAuth';
 import { AppLayout } from '../layouts/AppLayout';
-import { FirstTimeLoginPage } from '../pages/FirstTimeLoginPage';
-import { ForgotPasswordPage } from '../pages/ForgotPasswordPage';
+import { AccessArchitecturePage } from '../pages/AccessArchitecturePage';
+import { CRMLeadsPage } from '../pages/CRMLeadsPage';
+import { DashboardPage } from '../pages/DashboardPage';
+import { HRMSEmployeesPage } from '../pages/HRMSEmployeesPage';
+import { KanbanPage } from '../pages/KanbanPage';
 import { LoginPage } from '../pages/LoginPage';
-import { LogoutPage } from '../pages/LogoutPage';
-import { ResetPasswordPage } from '../pages/ResetPasswordPage';
-import { SetPasswordPage } from '../pages/SetPasswordPage';
+import { NotificationsPage } from '../pages/NotificationsPage';
+import { ProjectsPage } from '../pages/ProjectsPage';
+import { SettingsPage } from '../pages/SettingsPage';
 import { UnauthorizedPage } from '../pages/UnauthorizedPage';
-import { appRoutes } from './routeConfig';
-
-function RoleLandingRedirect() {
-  const { landingPath } = useAuth();
-
-  return <Navigate to={landingPath} replace />;
-}
 
 export function AppRoutes() {
   return (
     <AuthProvider>
       <Routes>
         <Route path="/login" element={<LoginPage />} />
-        <Route path="/first-time-login" element={<FirstTimeLoginPage />} />
-        <Route path="/set-password" element={<SetPasswordPage />} />
-        <Route path="/forgot-password" element={<ForgotPasswordPage />} />
-        <Route path="/reset-password" element={<ResetPasswordPage />} />
-        <Route path="/unauthorized" element={<UnauthorizedPage />} />
-        <Route path="/access-denied" element={<UnauthorizedPage />} />
-
-        <Route element={<ProtectedRoute />}>
+        <Route path="/unauthorized" element={<UnauthorizedPage />} />        <Route element={<ProtectedRoute />}>
           <Route path="/" element={<AppLayout />}>
-            <Route index element={<RoleLandingRedirect />} />
-            <Route path="logout" element={<LogoutPage />} />
+            <Route index element={<DashboardPage />} />
 
-            {appRoutes.map((route) => (
-              <Route key={route.path} element={<ProtectedRoute permissions={route.permissions} />}>
-                <Route path={route.path.slice(1)} element={route.element} />
-              </Route>
-            ))}
+            <Route element={<ProtectedRoute permissions={['all-modules:view']} />}>
+              <Route path="access-architecture" element={<AccessArchitecturePage />} />
+            </Route>
+
+            <Route element={<ProtectedRoute permissions={['projects:view']} />}>
+              <Route path="projects" element={<ProjectsPage />} />
+            </Route>
+
+            <Route element={<ProtectedRoute permissions={['kanban:view']} />}>
+              <Route path="kanban" element={<KanbanPage />} />
+            </Route>
+
+            <Route element={<ProtectedRoute permissions={['crm:leads:view']} />}>
+              <Route path="crm/leads" element={<CRMLeadsPage />} />
+            </Route>
+
+            <Route element={<ProtectedRoute permissions={['hrms:employees:view']} />}>
+              <Route path="hrms/employees" element={<HRMSEmployeesPage />} />
+            </Route>
+
+            <Route element={<ProtectedRoute permissions={['notifications:view']} />}>
+              <Route path="notifications" element={<NotificationsPage />} />
+            </Route>
+
+            <Route element={<ProtectedRoute permissions={['settings:view']} />}>
+              <Route path="settings" element={<SettingsPage />} />
+            </Route>
           </Route>
         </Route>
 
