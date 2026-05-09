@@ -1,5 +1,6 @@
 import { type FormEvent, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import { getApiErrorMessage } from '../api/error';
 import { useAuth } from '../context/useAuth';
 
 export function ResetPasswordPage() {
@@ -24,7 +25,7 @@ export function ResetPasswordPage() {
       await resetPassword(email, code, password);
       navigate('/login', { replace: true });
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : 'Unable to reset password');
+      setError(getApiErrorMessage(caught, 'Unable to reset password'));
     }
   }
 

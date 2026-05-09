@@ -1,7 +1,7 @@
 import { type FormEvent, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
+import { getApiErrorMessage } from '../api/error';
 import { useAuth } from '../context/useAuth';
-import { ROLE_ACCESS } from '../rbac/roles';
 
 export function SetPasswordPage() {
   const [params] = useSearchParams();
@@ -25,9 +25,9 @@ export function SetPasswordPage() {
 
     try {
       const activated = await activateUser(email, code, password, acceptedPolicy);
-      navigate(ROLE_ACCESS[activated.role].landingPath, { replace: true });
+      navigate(activated.landingPath ?? '/', { replace: true });
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : 'Unable to activate account');
+      setError(getApiErrorMessage(caught, 'Unable to activate account'));
     }
   }
 

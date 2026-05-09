@@ -41,9 +41,17 @@ export class AuthService {
     return Math.floor(100000 + Math.random() * 900000).toString();
   }
 
+  private normalizeEmail(email: string) {
+    return email.trim().toLowerCase();
+  }
+
+  private normalizeCode(code: string) {
+    return code.trim();
+  }
+
   private async getUserByEmail(email: string) {
     return this.prisma.user.findFirst({
-      where: { email: { equals: email.toLowerCase(), mode: 'insensitive' } },
+      where: { email: { equals: this.normalizeEmail(email), mode: 'insensitive' } },
       include: userInclude,
     });
   }
@@ -314,7 +322,7 @@ export class AuthService {
 
   async resetPassword(input: ResetPasswordDto) {
     const user = await this.getUserByEmail(input.email);
-    if (!user || user.resetCode !== input.code) {
+    if (!user || user.resetCode !== this.normalizeCode(input.code)) {
       throw new BadRequestException('Invalid reset code');
     }
 
@@ -340,7 +348,7 @@ export class AuthService {
     }
 
     const user = await this.getUserByEmail(input.email);
-    if (!user || user.activationCode !== input.code) {
+    if (!user || user.activationCode !== this.normalizeCode(input.code)) {
       throw new BadRequestException('Invalid activation link or OTP');
     }
 

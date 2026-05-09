@@ -1,6 +1,7 @@
 import { BriefcaseBusiness, Building2, Mail, ShieldCheck } from 'lucide-react';
 import { type FormEvent, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import { getApiErrorMessage } from '../api/error';
 import { useAuth } from '../context/useAuth';
 import { demoAccounts } from '../rbac/demoAccounts';
 import { ROLE_ACCESS, ROLE_LABELS } from '../rbac/roles';
@@ -21,8 +22,8 @@ export function LoginPage() {
     try {
       const loggedInUser = await login(email, password);
       navigate(ROLE_ACCESS[loggedInUser.role].landingPath, { replace: true });
-    } catch {
-      setError('Invalid login credentials');
+    } catch (caught) {
+      setError(getApiErrorMessage(caught, 'Invalid login credentials'));
     } finally {
       setIsSubmitting(false);
     }
@@ -34,8 +35,8 @@ export function LoginPage() {
 
     try {
       await socialLogin(provider);
-    } catch {
-      setError('Access Denied or Account Not Found');
+    } catch (caught) {
+      setError(getApiErrorMessage(caught, 'Access Denied or Account Not Found'));
       setIsSubmitting(false);
     }
   }

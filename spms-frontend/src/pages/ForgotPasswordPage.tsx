@@ -1,5 +1,6 @@
 import { type FormEvent, useState } from 'react';
 import { Link } from 'react-router-dom';
+import { getApiErrorMessage } from '../api/error';
 import { useAuth } from '../context/useAuth';
 
 export function ForgotPasswordPage() {
@@ -15,9 +16,9 @@ export function ForgotPasswordPage() {
 
     try {
       const code = await requestPasswordReset(email);
-      setMessage(`Password reset OTP for ${email}: ${code}`);
+      setMessage(`Password reset OTP for ${email.trim()}: ${code}`);
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : 'Unable to request password reset');
+      setError(getApiErrorMessage(caught, 'Unable to request password reset'));
     }
   }
 

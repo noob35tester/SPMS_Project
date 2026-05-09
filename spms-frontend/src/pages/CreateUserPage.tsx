@@ -1,5 +1,6 @@
 import { type FormEvent, useEffect, useState } from 'react';
 import { http } from '../api/http';
+import { getApiErrorMessage } from '../api/error';
 import { useAuth } from '../context/useAuth';
 import { ACCOUNT_STATUS_LABELS, ROLE_LABELS, type Role } from '../rbac/roles';
 
@@ -71,7 +72,7 @@ export function CreateUserPage() {
         role: 'EMPLOYEE',
       });
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : 'Unable to create user');
+      setError(getApiErrorMessage(caught, 'Unable to create user'));
     }
   }
 

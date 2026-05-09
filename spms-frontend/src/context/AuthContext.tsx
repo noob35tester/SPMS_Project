@@ -121,7 +121,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const login = useCallback(async (email: string, password: string) => {
     try {
-      const response = await http.post('/auth/login', { email, password });
+      const response = await http.post('/auth/login', { email: email.trim(), password });
       const apiUser = normalizeApiUser(response.data.user);
       if (apiUser.status && apiUser.status !== 'ACTIVE') {
         throw new Error('Account is not active');
@@ -131,7 +131,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setUser(apiUser);
       return apiUser;
     } catch (error) {
-      const localUser = users.find((account) => account.email.toLowerCase() === email.toLowerCase());
+      const localUser = users.find((account) => account.email.toLowerCase() === email.trim().toLowerCase());
 
       if (!localUser) {
         throw error;
@@ -172,20 +172,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
 
     try {
-      const response = await http.post('/users', input);
+      const response = await http.post('/users', {
+        ...input,
+        name: input.name.trim(),
+        email: input.email.trim(),
+        mobile: input.mobile.trim(),
+        designation: input.designation.trim(),
+      });
       const created = normalizeApiUser(response.data) as ManagedUser;
       created.activationCode = response.data.activationCode;
       persistUsers([created, ...users.filter((account) => account.id !== created.id)]);
       return created;
     } catch (error) {
-      if (users.some((account) => account.email.toLowerCase() === input.email.toLowerCase())) {
+      if (users.some((account) => account.email.toLowerCase() === input.email.trim().toLowerCase())) {
         throw new Error('A user with this email already exists');
       }
 
       const newUser: ManagedUser = {
         id: `user-${Date.now()}`,
         ...input,
-        email: input.email.toLowerCase(),
+        name: input.name.trim(),
+        email: input.email.trim().toLowerCase(),
+        mobile: input.mobile.trim(),
+        designation: input.designation.trim(),
         role: input.role,
         status: 'PENDING_ACTIVATION',
         activationCode: activationCode(),
@@ -199,8 +208,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const activateUser = useCallback(async (email: string, code: string, password: string, acceptedPolicy: boolean) => {
     try {
       const response = await http.post('/auth/activate', {
-        email,
-        code,
+        email: email.trim(),
+        code: code.trim(),
         password,
         acceptedPolicy,
       });
@@ -210,9 +219,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setUser(apiUser);
       return apiUser;
     } catch (error) {
-      const localUser = users.find((account) => account.email.toLowerCase() === email.toLowerCase());
+      const localUser = users.find((account) => account.email.toLowerCase() === email.trim().toLowerCase());
 
-      if (!localUser || localUser.activationCode !== code) {
+      if (!localUser || localUser.activationCode !== code.trim()) {
         throw error instanceof Error ? error : new Error('Invalid activation link or OTP');
       }
 
@@ -239,10 +248,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const requestPasswordReset = useCallback(async (email: string) => {
     try {
-      const response = await http.post('/auth/forgot-password', { email });
+      const response = await http.post('/auth/forgot-password', { email: email.trim() });
       return response.data.resetCode;
     } catch (error) {
-      const localUser = users.find((account) => account.email.toLowerCase() === email.toLowerCase());
+      const localUser = users.find((account) => account.email.toLowerCase() === email.trim().toLowerCase());
 
       if (!localUser) {
         throw error instanceof Error ? error : new Error('Account not found');
@@ -260,11 +269,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const resetPassword = useCallback(async (email: string, code: string, password: string) => {
     try {
-      await http.post('/auth/reset-password', { email, code, password });
+      await http.post('/auth/reset-password', { email: email.trim(), code: code.trim(), password });
     } catch (error) {
-      const localUser = users.find((account) => account.email.toLowerCase() === email.toLowerCase());
+      const localUser = users.find((account) => account.email.toLowerCase() === email.trim().toLowerCase());
 
-      if (!localUser || localUser.resetCode !== code) {
+      if (!localUser || localUser.resetCode !== code.trim()) {
         throw error instanceof Error ? error : new Error('Invalid reset code');
       }
 

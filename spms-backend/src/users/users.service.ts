@@ -42,6 +42,10 @@ export class UsersService {
     return Math.floor(100000 + Math.random() * 900000).toString();
   }
 
+  private normalizeEmail(email: string) {
+    return email.trim().toLowerCase();
+  }
+
   formatUser(user: any) {
     const roles = user.userRoles?.map((userRole: any) => userRole.role.name) ?? [];
     const permissions = [
@@ -79,7 +83,7 @@ export class UsersService {
 
   async findOneByEmail(email: string) {
     return this.prisma.user.findFirst({
-      where: { email: { equals: email.toLowerCase(), mode: 'insensitive' } },
+      where: { email: { equals: this.normalizeEmail(email), mode: 'insensitive' } },
       include: includeUser,
     });
   }
@@ -145,7 +149,7 @@ export class UsersService {
       const created = await tx.user.create({
         data: {
           name: input.name,
-          email: input.email.toLowerCase(),
+          email: this.normalizeEmail(input.email),
           mobile: input.mobile,
           designation: input.designation,
           departmentId: input.departmentId,
@@ -184,7 +188,7 @@ export class UsersService {
       where: { id },
       data: {
         ...input,
-        email: input.email?.toLowerCase(),
+        email: input.email ? this.normalizeEmail(input.email) : undefined,
       },
       include: includeUser,
     });

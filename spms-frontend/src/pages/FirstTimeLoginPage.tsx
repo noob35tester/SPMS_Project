@@ -9,7 +9,7 @@ export function FirstTimeLoginPage() {
 
   function submit(event: FormEvent) {
     event.preventDefault();
-    navigate(`/set-password?email=${encodeURIComponent(email)}&code=${encodeURIComponent(code)}`);
+    navigate(`/set-password?email=${encodeURIComponent(email.trim())}&code=${encodeURIComponent(code.trim())}`);
   }
 
   return (
