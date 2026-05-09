@@ -1,0 +1,165 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model User {
+  id           String     @id @default(uuid())
+  name         String
+  email        String     @unique
+  passwordHash String
+  status       UserStatus @default(ACTIVE)
+  departmentId String?
+  department   Department? @relation(fields: [departmentId], references: [id])
+  userRoles    UserRole[]
+  assignedTasks Task[] @relation("TaskAssignee")
+  createdTasks  Task[] @relation("TaskCreator")
+  comments      TaskComment[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+enum UserStatus {
+  ACTIVE
+  INACTIVE
+  RESIGNED
+}
+
+model Role {
+  id        String     @id @default(uuid())
+  name      String     @unique
+  userRoles UserRole[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model UserRole {
+  id     String @id @default(uuid())
+  userId String
+  roleId String
+  user User @relation(fields: [userId], references: [id])
+  role Role @relation(fields: [roleId], references: [id])
+  @@unique([userId, roleId])
+}
+
+model Department {
+  id   String @id @default(uuid())
+  name String @unique
+  users    User[]
+  projects Project[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Project {
+  id          String        @id @default(uuid())
+  name        String
+  description String?
+  status      ProjectStatus @default(ACTIVE)
+  departmentId String?
+  department   Department? @relation(fields: [departmentId], references: [id])
+  tasks Task[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+enum ProjectStatus {
+  ACTIVE
+  ON_HOLD
+  COMPLETED
+  CANCELLED
+}
+
+model Task {
+  id          String       @id @default(uuid())
+  title       String
+  description String?
+  priority    TaskPriority @default(MEDIUM)
+  dueDate     DateTime?
+  projectId String
+  project   Project @relation(fields: [projectId], references: [id])
+  assigneeId String?
+  assignee   User? @relation("TaskAssignee", fields: [assigneeId], references: [id])
+  createdById String
+  createdBy   User @relation("TaskCreator", fields: [createdById], references: [id])
+  statusId String
+  status   WorkflowState @relation(fields: [statusId], references: [id])
+  comments TaskComment[]
+  history  TaskStatusHistory[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+enum TaskPriority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
+
+model WorkflowDefinition {
+  id     String @id @default(uuid())
+  name   String
+  module String
+  states      WorkflowState[]
+  transitions WorkflowTransition[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model WorkflowState {
+  id    String @id @default(uuid())
+  name  String
+  order Int
+  workflowId String
+  workflow   WorkflowDefinition @relation(fields: [workflowId], references: [id])
+  tasks Task[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model WorkflowTransition {
+  id String @id @default(uuid())
+  workflowId String
+  workflow   WorkflowDefinition @relation(fields: [workflowId], references: [id])
+  fromStateId String
+  toStateId   String
+  allowedRole String
+  actionName  String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model TaskStatusHistory {
+  id String @id @default(uuid())
+  taskId String
+  task   Task @relation(fields: [taskId], references: [id])
+  fromStatus String?
+  toStatus   String
+  changedById String
+  changedAt   DateTime @default(now())
+}
+
+model TaskComment {
+  id      String @id @default(uuid())
+  message String
+  taskId String
+  task   Task @relation(fields: [taskId], references: [id])
+  userId String
+  user   User @relation(fields: [userId], references: [id])
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Notification {
+  id      String  @id @default(uuid())
+  title   String
+  message String
+  isRead  Boolean @default(false)
+  userId String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
